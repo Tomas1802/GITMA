@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GITMA</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="no-repo">
+    <header id="titlebar" data-tauri-drag-region>
+      <span class="logo" data-tauri-drag-region>GITMA</span>
+      <div id="tabs"></div>
+      <button id="open-repo" class="icon-btn" title="Open repository (Ctrl+O)">+</button>
+      <div class="spacer" data-tauri-drag-region></div>
+      <button id="update" class="update-pill" hidden></button>
+      <div class="win-btns">
+        <button id="win-min" title="Minimize">&#xE921;</button>
+        <button id="win-max" title="Maximize">&#xE922;</button>
+        <button id="win-close" class="close" title="Close">&#xE8BB;</button>
+      </div>
+    </header>
+    <div id="toolbar"></div>
+    <div id="banner" hidden></div>
+    <main id="workspace">
+      <div id="sidebar-host"></div>
+      <section id="center"><div id="views"></div></section>
+      <div id="panel-host"></div>
+    </main>
+    <div id="empty">
+      <div class="empty-card">
+        <svg viewBox="0 0 512 512" width="72" height="72" aria-hidden="true">
+          <g fill="none" stroke="#7aa2f7" stroke-width="34" stroke-linecap="round">
+            <path d="M176 120 V392" /><path d="M176 330 C176 250 336 270 336 190" stroke="#bb9af7" />
+          </g>
+          <circle cx="176" cy="120" r="38" fill="#7aa2f7" /><circle cx="176" cy="392" r="38" fill="#7aa2f7" />
+          <circle cx="336" cy="170" r="38" fill="#bb9af7" />
+        </svg>
+        <h1>GITMA</h1>
+        <p>Open a Git repository to get started.</p>
+        <button id="empty-open" class="btn primary">Open repository…</button>
+        <p class="muted small">Ctrl+O · or run <code>gitma &lt;folder&gt;</code> · or right-click a folder → Open in GITMA</p>
+      </div>
+    </div>
+    <div id="toasts"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
