@@ -4,6 +4,7 @@ import { LOG_FORMAT, REF_FORMAT, parseLog, parseRefs, parseStatus } from './pars
 import { layout } from './graph.js';
 
 export const PAGE = 5000;
+const BASE_NAMES = ['main', 'master', 'develop'];
 let nextId = 1;
 
 export class GitError extends Error {
@@ -21,6 +22,9 @@ export class Repo {
     this.name = info.root.split(/[\\/]/).pop();
     this.commits = [];
     this.list = [];
+    this.basedOn = new Map();
+    this.base = null;
+    this.focus = null; // highlighted branch: { ref, against, only: Set, base }
     this.index = new Map();
     this.refsBySha = new Map();
     this.rows = [];
@@ -117,10 +121,49 @@ export class Repo {
       branch: /^branch refs\/heads\/(.*)$/m.exec(b)?.[1] ?? '(detached)',
     })).filter((w) => w.path);
     if (this.solo && !this.refs.some((r) => r.name === this.solo)) this.solo = null;
-    await Promise.all([this.#loadLog(), this.#loadStatus()]);
+    // Lay out once both are in: laying out with fresh log but stale status hid the WIP row and
+    // moved the selection off it, so the staging panel didn't show on open.
+    await Promise.all([this.#loadLog(false), this.#loadStatus(false), this.#loadBasedOn()]);
+    this.#layout();
   }
 
-  async #loadLog() {
+  /** The reference branch other branches are compared to: main, master or develop (local first). */
+  #findBase() {
+    for (const type of ['local', 'remote']) {
+      for (const n of BASE_NAMES) {
+        const r = this.refs.find((x) => x.type === type && (type === 'local' ? x.short === n : x.short === `${x.remote}/${n}`));
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+
+  /** Per local branch: commits ahead of / behind the base branch (`git for-each-ref %(ahead-behind)`). */
+  async #loadBasedOn() {
+    this.base = this.#findBase();
+    this.basedOn = new Map();
+    if (!this.base) return;
+    // Needs git 2.41+; older git just fails and the sidebar shows no "based on" label.
+    const out = await this.git(['for-each-ref', `--format=%(refname)%1f%(ahead-behind:${this.base.name})`, 'refs/heads'], { ok: [0, 128, 129] });
+    for (const line of out.split('\n')) {
+      const [name, counts] = line.split('\x1f');
+      const [ahead, behind] = (counts ?? '').split(' ').map(Number);
+      if (name && Number.isFinite(ahead)) this.basedOn.set(name, { ahead, behind });
+    }
+  }
+
+  /** What a branch is compared against when highlighted: the checked-out branch, or for that one, the base. */
+  compareTarget(ref) {
+    if (!ref.head && this.head.sha) return { rev: 'HEAD', label: this.head.branch ?? 'HEAD' };
+    const local = ref.type === 'local' ? ref.short : ref.short.slice(ref.remote.length + 1);
+    const base = this.base && this.base.short !== local && this.base.short !== ref.short ? this.base : null;
+    const upstream = this.local(local)?.upstream;
+    if (base) return { rev: base.name, label: base.short };
+    if (upstream && upstream !== ref.short) return { rev: upstream, label: upstream };
+    return null;
+  }
+
+  async #loadLog(relayout = true) {
     if (!this.head.sha && !this.refs.length) {
       this.commits = [];
     } else {
@@ -139,17 +182,17 @@ export class Repo {
       if (!this.refsBySha.has(r.sha)) this.refsBySha.set(r.sha, []);
       this.refsBySha.get(r.sha).push(r);
     }
-    this.#layout();
+    if (relayout) this.#layout();
   }
 
-  async #loadStatus() {
+  async #loadStatus(relayout = true) {
     const [status, state] = await Promise.all([
       this.git(['status', '--porcelain=v2', '-z', '--untracked-files=all']),
       invoke('repo_state', { gitDir: this.gitDir }),
     ]);
     this.status = parseStatus(status);
     this.state = state;
-    this.#layout();
+    if (relayout) this.#layout();
   }
 
   /** The WIP row is a virtual commit on top of HEAD whenever the working tree is dirty. */

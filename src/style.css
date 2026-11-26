@@ -244,7 +244,7 @@ body.no-repo #empty { display: flex; }
   border: 1px solid color-mix(in srgb, var(--lane) 55%, transparent); cursor: grab;
 }
 .pill.current { background: color-mix(in srgb, var(--lane) 40%, transparent); font-weight: 600; }
-.pill.remote { border-style: dashed; }
+.pill.remote { background: transparent; color: var(--dim); }
 .pill.tag { border-radius: 10px; cursor: default; }
 .pill.more { cursor: default; background: var(--hover); border-color: var(--line); padding: 0 5px; }
 .pill .cloud { color: var(--dim); font-size: 10px; }
@@ -443,3 +443,30 @@ body.no-repo #empty { display: flex; }
 /* Collapsible sidebar */
 body.side-collapsed .sidebar { display: none; }
 .tbtn.on .ticon { color: var(--accent2); }
+
+/* Branch highlight (click a branch): its own commits lit, split point marked */
+.row.hl .c-msg { color: var(--fg); }
+.row.hl::after { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--accent2); }
+.row.fork { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.fork-tag {
+  margin-right: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+}
+.side-item.focused { background: var(--sel); }
+.based { color: var(--muted); font-size: 10.5px; font-family: var(--mono); flex: none; }
+
+/* The graph never paints over the right panel; columns drop out as the center narrows. */
+#center { overflow: hidden; }
+.graph { container-type: inline-size; }
+@container (max-width: 860px) {
+  .graph-header, .row { grid-template-columns: 170px var(--graph-w) minmax(100px, 1fr) 120px 90px; }
+  .c-sha { display: none; }
+}
+@container (max-width: 700px) {
+  .graph-header, .row { grid-template-columns: 140px var(--graph-w) minmax(100px, 1fr) 90px; }
+  .c-sha, .c-author { display: none; }
+}
+@container (max-width: 520px) {
+  .graph-header, .row { grid-template-columns: 110px var(--graph-w) minmax(80px, 1fr); }
+  .c-sha, .c-author, .c-date { display: none; }
+}

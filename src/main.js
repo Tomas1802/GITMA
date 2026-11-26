@@ -23,15 +23,27 @@ const app = {
   views: [],
   openFile: null,
 
-  select(sha, scroll = false) {
+  select(sha, scroll = false, keepFocus = false) {
     const r = app.repo;
     if (!r) return;
     r.selected = sha;
     r.selectedStash = null;
+    if (!keepFocus && r.focus) {
+      r.focus = null;
+      sidebar.render();
+    }
     closeViews();
     if (scroll && !graph.scrollTo(sha)) toast('That commit is not in the loaded graph (hidden or too old)', { kind: 'error' });
     graph.render();
     panel.render();
+  },
+
+  /** Selects a branch and highlights the commits only it has, plus where it splits off. Esc clears. */
+  async selectRef(ref) {
+    const r = app.repo;
+    r.focus = { ref, against: '', only: new Set(), base: null };
+    app.select(ref.sha, true, true);
+    await loadFocus(r);
   },
 
   selectStash(s) {
@@ -97,6 +109,30 @@ const app = {
     pushView(createConflictView({ repo: app.repo, path, onClose: popView }));
   },
 };
+
+/** Fills repo.focus for its branch: commits not on the compare target, and their merge-base. */
+async function loadFocus(r) {
+  const f = r.focus;
+  if (!f) return;
+  const ref = r.refs.find((x) => x.name === f.ref.name);
+  const target = ref && r.compareTarget(ref);
+  if (!ref || !target) {
+    r.focus = ref ? { ref, against: '', only: new Set(), base: null } : null;
+    return graph.render();
+  }
+  try {
+    const [only, base] = await Promise.all([
+      r.git(['rev-list', '-n', '5000', ref.name, `^${target.rev}`]),
+      r.git(['merge-base', target.rev, ref.name], { ok: [0, 1] }),
+    ]);
+    if (r.focus !== f) return; // another selection happened meanwhile
+    r.focus = { ref, against: target.label, only: new Set(only.split('\n').filter(Boolean)), base: base.trim() || null };
+  } catch (e) {
+    toastError(e, 'Highlight branch');
+  }
+  graph.render();
+  sidebar.render();
+}
 
 const graph = createGraphView(app);
 const sidebar = createSidebar(app);
@@ -216,6 +252,7 @@ function onRepoChanged(repo, kind) {
   const top = app.views[app.views.length - 1];
   if (top?.reload) top.reload();
   if (search.value) setSearch(search.value, false);
+  if (kind === 'refs' && repo.focus) loadFocus(repo);
 }
 
 function renderAll() {
@@ -372,6 +409,11 @@ addEventListener('keydown', (e) => {
   else if (ctrl && e.shiftKey && k === 's') A.stash(r);
   else if (ctrl && e.shiftKey && k === 'm') focusCommit();
   else if (k === 'escape' && app.views.length && !typing) popView();
+  else if (k === 'escape' && r.focus && !typing) {
+    r.focus = null;
+    graph.render();
+    sidebar.render();
+  }
   else return;
   e.preventDefault();
 });

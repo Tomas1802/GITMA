@@ -25,14 +25,24 @@ export function createSidebar(app) {
   function refItem(r, ref, label = ref.short) {
     const hidden = r.hidden.has(ref.name);
     const solo = r.solo === ref.name;
-    return el('div.side-item' + (ref.head ? '.current' : '') + (hidden ? '.hidden' : ''), {
-      title: ref.upstream ? `${ref.short} → ${ref.upstream}` : ref.short,
-      onclick: () => app.select(ref.sha, true),
+    const based = r.base && r.base.name !== ref.name ? r.basedOn.get(ref.name) : null;
+    const basedText = based && (based.ahead > 0
+      ? `${r.base.short} +${based.ahead}${based.behind ? ` −${based.behind}` : ''}`
+      : based.behind > 0 ? `in ${r.base.short}` : '');
+    const basedTitle = based && (based.ahead > 0
+      ? `Splits from ${r.base.short}: ${based.ahead} commit(s) not in ${r.base.short}${based.behind ? `, ${based.behind} behind it` : ''}`
+      : `Fully contained in ${r.base.short}`);
+    const focused = r.focus?.ref.name === ref.name;
+    return el('div.side-item' + (ref.head ? '.current' : '') + (hidden ? '.hidden' : '') + (focused ? '.focused' : ''), {
+      title: (ref.upstream ? `${ref.short} → ${ref.upstream}` : ref.short) + (basedTitle ? `\n${basedTitle}` : '') +
+        (ref.type !== 'tag' ? '\nClick: highlight this branch (Esc clears)' : ''),
+      onclick: () => (ref.type === 'tag' ? app.select(ref.sha, true) : app.selectRef(ref)),
       ondblclick: () => !ref.head && A.checkoutRef(r, ref),
       oncontextmenu: (e) => refMenu(e, app, ref),
     },
     el('span.item-icon', {}, ref.head ? '✓' : ref.type === 'tag' ? '◆' : '⎇'),
     el('span.item-name', {}, label),
+    basedText && el('span.based', {}, basedText),
     ref.ahead > 0 && el('span.badge.ahead', { title: `${ref.ahead} to push` }, `↑${ref.ahead}`),
     ref.behind > 0 && el('span.badge.behind', { title: `${ref.behind} to pull` }, `↓${ref.behind}`),
     ref.gone && el('span.badge.gone', { title: 'Upstream branch was deleted' }, 'gone'),

@@ -7,7 +7,6 @@ import { checkout, checkoutRef } from './actions.js';
 const H = 28; // row height
 const LW = 18; // lane width
 const MAX_LANES = 40;
-const REFS_W = 210;
 const OVERSCAN = 8;
 export const COLORS = ['#7aa2f7', '#bb9af7', '#9ece6a', '#e0af68', '#f7768e', '#7dcfff', '#ff9e64', '#73daca', '#c0caf5', '#2ac3de'];
 export const laneColor = (j) => COLORS[j % COLORS.length];
@@ -47,8 +46,12 @@ export function createGraphView(app) {
     const color = laneColor(r.rows[i].col);
     const refs = c.wip ? [] : r.refsBySha.get(c.sha) ?? [];
     const isMatch = search.q && search.matches.includes(i);
+    const f = r.focus; // a selected branch: its own commits stay lit, the split point is marked
+    const isOnly = f?.only.has(c.sha);
+    const isFork = f?.base === c.sha;
+    const dim = (search.q && !isMatch) || (f && !isOnly && !isFork);
     const row = el('div.row' + (c.sha === r.selected ? '.selected' : '') + (c.sha === r.head.sha ? '.head' : '') +
-      (search.q && !isMatch ? '.dim' : '') + (c.wip ? '.wip' : ''), {
+      (dim ? '.dim' : '') + (isOnly ? '.hl' : '') + (isFork ? '.fork' : '') + (c.wip ? '.wip' : ''), {
       style: { top: i * H + 'px', '--lane': color },
       onclick: () => app.select(c.sha),
       ondblclick: () => !c.wip && dblClickCommit(r, c),
@@ -64,7 +67,9 @@ export function createGraphView(app) {
     c.wip
       ? el('div.c-msg', {}, el('span.wip-label', {}, '// WIP'), ` ${r.status.files.length} changed file${r.status.files.length === 1 ? '' : 's'}`,
           r.state && el('span.state-tag', {}, r.state.toUpperCase() + ' IN PROGRESS'))
-      : el('div.c-msg', { title: c.subject }, c.subject),
+      : el('div.c-msg', { title: c.subject },
+          isFork && el('span.fork-tag', { title: `${f.ref.short} splits from ${f.against} at this commit` }, `⑂ ${f.ref.short} splits from ${f.against}`),
+          c.subject),
     el('div.c-author', { title: c.email }, c.wip ? '' : c.author),
     el('div.c-date', { title: c.wip ? '' : new Date(c.time * 1000).toLocaleString() }, c.wip ? '' : relTime(c.time)),
     el('div.c-sha', {}, c.wip ? '' : shortSha(c.sha)));
@@ -102,11 +107,16 @@ export function createGraphView(app) {
   const order = (x) => ({ local: 0, remote: 1, tag: 2 })[x.type];
 
   function pill(r, ref, remotes) {
-    const icon = ref.type === 'tag' ? '◆ ' : ref.head ? '✓ ' : '';
+    const icon = ref.type === 'tag' ? '◆ ' : ref.head ? '✓ ' : ref.type === 'remote' ? '☁ ' : '';
     return el('span.pill.' + ref.type + (ref.head ? '.current' : ''), {
       draggable: ref.type !== 'tag',
       dataset: { name: ref.short },
-      title: `${ref.short}${remotes.length ? '\n' + remotes.map((x) => x.short).join('\n') : ''}\nDrag onto another branch to merge or rebase`,
+      title: `${ref.short}${remotes.length ? '\n' + remotes.map((x) => x.short).join('\n') : ''}\nClick: highlight this branch · Drag onto another branch to merge or rebase`,
+      onclick: (e) => {
+        e.stopPropagation();
+        if (ref.type !== 'tag') app.selectRef(ref);
+        else app.select(ref.sha);
+      },
       ondblclick: (e) => {
         e.stopPropagation();
         if (!ref.head) checkoutRef(r, ref);
@@ -134,7 +144,8 @@ export function createGraphView(app) {
     const dpr = devicePixelRatio || 1;
     const w = graphPx();
     const h = scroll.clientHeight;
-    canvas.style.left = REFS_W + 'px';
+    // Follow the real column position (it shrinks on narrow windows).
+    canvas.style.left = header.querySelector('.c-graph').offsetLeft + 'px';
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
